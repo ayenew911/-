@@ -22,17 +22,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.8'
-          channel: 'stable'
-
-      - name: Accept Android Licenses & Tools
+      - name: Install Android NDK & SDK Components
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "cmdline-tools;latest" "build-tools;34.0.0" "platforms;android-34"
-          flutter doctor --android-licenses || true
+          sdkmanager "cmdline-tools;latest" "build-tools;34.0.0" "platforms;android-34" "ndk;25.2.9519653"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -49,6 +42,7 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
           CI: "true"
         run: |
           echo "y" | flet build apk --verbose
@@ -56,5 +50,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flet-app-apk
+          name: app-release-apk
           path: build/apk/*.apk
