@@ -19,10 +19,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
           channel: 'stable'
 
       - name: Setup Python
@@ -38,7 +44,7 @@ jobs:
 
       - name: Build APK with Flet
         run: |
-          yes | flet build apk
+          echo "y" | flet build apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
