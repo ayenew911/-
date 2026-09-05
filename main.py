@@ -1,664 +1,610 @@
+import flet as ft
 import sqlite3
 from datetime import datetime
-import flet as ft
+import json
 
 # ==========================================
-# 1. DATABASE LAYER (የመረጃ ቋት አስተዳዳሪ)
+# 1. DATABASE INITIALIZATION & SEEDING
 # ==========================================
-class DatabaseManager:
-    def __init__(self, db_name="ayenew_amharic_app.db"):
-        self.db_name = db_name
-        self.init_db()
+DB_NAME = "life_os.db"
 
-    def get_connection(self):
-        return sqlite3.connect(self.db_name)
-
-    def init_db(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # 1. የፖርትፎሊዮ ሰንጠረዥ
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS projects (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    tech_stack TEXT NOT NULL,
-                    date_created TEXT NOT NULL
-                )
-            """)
-
-            # 2. የወጪዎች ሰንጠረዥ
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS expenses (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    amount REAL NOT NULL,
-                    category TEXT NOT NULL,
-                    date_created TEXT NOT NULL
-                )
-            """)
-
-            # 3. የማስታወሻዎችና ግቦች ሰንጠረዥ
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS notes_goals (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    progress REAL DEFAULT 0.0,
-                    status TEXT DEFAULT 'አክቲቭ'
-                )
-            """)
-
-            # 4. የአስታዋሾች ሰንጠረዥ
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS reminders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    task_name TEXT NOT NULL,
-                    due_time TEXT NOT NULL,
-                    priority TEXT DEFAULT 'መካከለኛ',
-                    is_completed INTEGER DEFAULT 0
-                )
-            """)
-            conn.commit()
-            self._seed_initial_data()
-
-    def _seed_initial_data(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM projects")
-            if cursor.fetchone()[0] == 0:
-                projects = [
-                    (
-                        "የትምህርት ቤት አውቶሜሽን ሲስተም",
-                        "የተማሪዎችን መረጃ፣ ውጤትና ክፍያ በዘመናዊ መልኩ የሚያስተዳድር የዴስክቶፕ ሶፍትዌር።",
-                        "Python, PySide6, SQLite",
-                        datetime.now().strftime("%Y-%m-%d")
-                    ),
-                    (
-                        "የሽያጭና እቃ መቆጣጠሪያ (ልብሱ ሞባይል)",
-                        "የሞባይል ጥገና እና የእቃዎች ክምችት መቆጣጠሪያ ሶፍትዌር።",
-                        "Python, Flet, SQLite",
-                        datetime.now().strftime("%Y-%m-%d")
-                    ),
-                    (
-                        "ግዕዝ ክሊኒክ ማኔጅመንት",
-                        "የህክምና ታካሚዎችን እና የመድኃኒት ክምችት በኢትዮጵያ ዘመን አቆጣጠር የሚያስተዳድር።",
-                        "Python, CustomTkinter, SQLite",
-                        datetime.now().strftime("%Y-%m-%d")
-                    )
-                ]
-                cursor.executemany(
-                    "INSERT INTO projects (title, description, tech_stack, date_created) VALUES (?, ?, ?, ?)",
-                    projects
-                )
-                conn.commit()
-
-    # --- ፖርትፎሊዮ CRUD ---
-    def get_projects(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM projects ORDER BY id DESC")
-            return cursor.fetchall()
-
-    # --- ወጪዎች CRUD ---
-    def get_expenses(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM expenses ORDER BY id DESC")
-            return cursor.fetchall()
-
-    def add_expense(self, title, amount, category, date_str):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO expenses (title, amount, category, date_created) VALUES (?, ?, ?, ?)",
-                (title, float(amount), category, date_str)
-            )
-            conn.commit()
-
-    def delete_expense(self, expense_id):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
-            conn.commit()
-
-    def get_expense_stats(self):
-        today = datetime.now().strftime("%Y-%m-%d")
-        current_month = datetime.now().strftime("%Y-%m")
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT SUM(amount) FROM expenses WHERE date_created = ?", (today,))
-            daily_total = cursor.fetchone()[0] or 0.0
-
-            cursor.execute("SELECT SUM(amount) FROM expenses WHERE date_created LIKE ?", (f"{current_month}%",))
-            monthly_total = cursor.fetchone()[0] or 0.0
-
-        return daily_total, monthly_total
-
-    # --- ማስታወሻና ግቦች CRUD ---
-    def get_notes_goals(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM notes_goals ORDER BY id DESC")
-            return cursor.fetchall()
-
-    def add_note_goal(self, title, content, item_type, progress=0.0):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO notes_goals (title, content, type, progress) VALUES (?, ?, ?, ?)",
-                (title, content, item_type, progress)
-            )
-            conn.commit()
-
-    def delete_note_goal(self, item_id):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM notes_goals WHERE id = ?", (item_id,))
-            conn.commit()
-
-    def update_goal_progress(self, item_id, new_progress):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE notes_goals SET progress = ? WHERE id = ?", (new_progress, item_id))
-            conn.commit()
-
-    # --- አስታዋሾች CRUD ---
-    def get_reminders(self):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM reminders ORDER BY is_completed ASC, id DESC")
-            return cursor.fetchall()
-
-    def add_reminder(self, task_name, due_time, priority):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO reminders (task_name, due_time, priority, is_completed) VALUES (?, ?, ?, 0)",
-                (task_name, due_time, priority)
-            )
-            conn.commit()
-
-    def toggle_reminder(self, reminder_id, status):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE reminders SET is_completed = ? WHERE id = ?", (status, reminder_id))
-            conn.commit()
-
-    def delete_reminder(self, reminder_id):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
-            conn.commit()
-
-
-# ==========================================
-# 2. UI LOGIC (የተጠቃሚ ገጽታ ማስተካከያ)
-# ==========================================
-class AyenewPersonalOS:
-    def __init__(self, page: ft.Page):
-        self.page = page
-        self.db = DatabaseManager()
-        
-        # የገጽታ ቅንብር
-        self.page.title = "አየነው - የግል ስራና እንቅስቃሴ መቆጣጠሪያ"
-        self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.padding = 0
-        self.page.scroll = None
-
-        self.selected_tab = 0
-        self.init_ui()
-
-    def init_ui(self):
-        # የላይኛው ባር (AppBar)
-        self.page.appbar = ft.AppBar(
-            title=ft.Text("አየነው - የግል OS", weight=ft.FontWeight.BOLD, size=18),
-            center_title=False,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            actions=[
-                ft.IconButton(
-                    icon=ft.Icons.LIGHTBULB_OUTLINE,
-                    tooltip="የገጽታ ቀለም ቀይር",
-                    on_click=self.toggle_theme
-                )
-            ]
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # 1. Daily Tasks Table (የእለት እንቅስቃሴ)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            steps TEXT,
+            priority TEXT DEFAULT 'መካከለኛ',
+            is_completed INTEGER DEFAULT 0,
+            created_at TEXT
         )
-
-        # የታችኛው መነሻ ባር (NavigationBar)
-        self.page.navigation_bar = ft.NavigationBar(
-            selected_index=self.selected_tab,
-            on_change=self.on_tab_change,
-            destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.PERSON_ROUNDED, label="ፖርትፎሊዮ"),
-                ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="ወጪዎች"),
-                ft.NavigationBarDestination(icon=ft.Icons.TASK_ALT, label="ማስታወሻና ግቦች"),
-                ft.NavigationBarDestination(icon=ft.Icons.NOTIFICATIONS_ACTIVE, label="አስታዋሾች"),
-            ]
+    ''')
+    
+    # 2. Financial Transactions Table (የገንዘብ እንቅስቃሴ)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            amount REAL NOT NULL,
+            trans_type TEXT NOT NULL, -- 'ገቢ' or 'ወጪ'
+            category TEXT NOT NULL,
+            trans_date TEXT
         )
-
-        self.main_container = ft.Container(expand=True, padding=15)
-        self.page.add(self.main_container)
-        self.render_view()
-
-    def toggle_theme(self, e):
-        self.page.theme_mode = (
-            ft.ThemeMode.LIGHT if self.page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
+    ''')
+    
+    # 3. Contacts Table (የግንኙነት መዝገብ)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            role TEXT,
+            phone TEXT,
+            notes TEXT,
+            last_contact TEXT
         )
-        e.control.icon = (
-            ft.Icons.LIGHTBULB if self.page.theme_mode == ft.ThemeMode.DARK else ft.Icons.LIGHTBULB_OUTLINE
+    ''')
+    
+    # 4. Projects Table (የፕሮጀክት ማኔጀር)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'በመሰራት ላይ',
+            progress INTEGER DEFAULT 0
         )
-        self.page.update()
-
-    def on_tab_change(self, e):
-        self.selected_tab = e.control.selected_index
-        self.render_view()
-
-    def render_view(self):
-        if self.selected_tab == 0:
-            self.main_container.content = self.build_portfolio_view()
-        elif self.selected_tab == 1:
-            self.main_container.content = self.build_expenses_view()
-        elif self.selected_tab == 2:
-            self.main_container.content = self.build_notes_goals_view()
-        elif self.selected_tab == 3:
-            self.main_container.content = self.build_reminders_view()
-        self.page.update()
-
-    # ------------------------------------------
-    # ክፍል 1: ፖርትፎሊዮ (PORTFOLIO MODULE)
-    # ------------------------------------------
-    def build_portfolio_view(self):
-        projects = self.db.get_projects()
-        project_cards = []
-
-        for proj in projects:
-            p_id, title, desc, stack, date_c = proj
-            chips = [
-                ft.Chip(label=ft.Text(tech.strip(), size=11), bgcolor=ft.Colors.PRIMARY_CONTAINER)
-                for tech in stack.split(",")
-            ]
-            project_cards.append(
-                ft.Card(
-                    content=ft.Container(
-                        padding=15,
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Icon(ft.Icons.CODE_ROUNDED, color=ft.Colors.PRIMARY),
-                                ft.Text(title, size=16, weight=ft.FontWeight.BOLD, expand=True)
-                            ]),
-                            ft.Text(desc, size=13, color=ft.Colors.OUTLINE),
-                            ft.Row(chips, wrap=True),
-                            ft.Text(f"የተሰራበት ቀን: {date_c}", size=10, color=ft.Colors.SECONDARY)
-                        ], spacing=8)
-                    )
-                )
-            )
-
-        return ft.ListView([
-            ft.Container(
-                padding=15,
-                border_radius=12,
-                bgcolor=ft.Colors.SURFACE_CONTAINER,
-                content=ft.Column([
-                    ft.Row([
-                        ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, size=35), radius=30),
-                        ft.Column([
-                            ft.Text("አየነው ታደሰ", size=20, weight=ft.FontWeight.BOLD),
-                            ft.Text("የሶፍትዌር ባለሙያ (Software Engineer)", size=13, color=ft.Colors.PRIMARY),
-                        ], spacing=2)
-                    ], spacing=15),
-                    ft.Divider(),
-                    ft.Text(
-                        "የሶፍትዌር ባለሙያ በ Python, PySide6, Flet, SQLite፣ የትምህርት ቤት አውቶሜሽን እና የሽያጭና እቃ መቆጣጠሪያ ሲስተሞች።",
-                        size=13
-                    ),
-                    ft.Row([
-                        ft.ElevatedButton(
-                            "ስልክ ደውል",
-                            icon=ft.Icons.PHONE,
-                            on_click=lambda _: self.page.launch_url("tel:+251900000000")
-                        ),
-                        ft.ElevatedButton(
-                            "ቴሌግራም",
-                            icon=ft.Icons.SEND,
-                            on_click=lambda _: self.page.launch_url("https://t.me/AyenewTadesse")
-                        ),
-                    ], wrap=True, alignment=ft.MainAxisAlignment.START)
-                ], spacing=10)
+    ''')
+    
+    # 5. Portfolio Table (የሶፍትዌር ኤግዚቢሽን)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS portfolio (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            description TEXT NOT NULL,
+            tech_stack TEXT NOT NULL,
+            price_estimate TEXT
+        )
+    ''')
+    
+    # Seed default portfolio items if empty
+    cursor.execute("SELECT COUNT(*) FROM portfolio")
+    if cursor.fetchone()[0] == 0:
+        default_portfolio = [
+            (
+                "EthioDoc - የሰነዶች ማኔጅመንት",
+                "ዴስክቶፕ ሲስተም (PySide6)",
+                "የተለያዩ ፋይሎችን እና ኦፊሴላዊ ሰነዶችን በOCR ቴክኖሎጂ ታግዞ በደመና እና በኮምፒውተር ላይ የሚያደራጅ ሶፍትዌር።",
+                "Python, PySide6, SQLite, Tesseract OCR",
+                "25,000 ብር"
             ),
-            ft.Text("የተሰሩ ሶፍትዌሮችና ፕሮጀክቶች", size=16, weight=ft.FontWeight.BOLD),
-            *project_cards
-        ], spacing=15)
+            (
+                "ልብሱ ሞባይል ጥገና - የዕቃ መቆጣጠሪያ",
+                "የንግድ ሲስተም (CustomTkinter)",
+                "የሞባይል ጥገና ሱቆች ዕቃዎችን፣ የጥገና ቀጠሮዎችን እና የገንዘብ ሂሳብን በቀላሉ የሚያስተዳድሩበት።",
+                "Python, CustomTkinter, SQLite",
+                "18,000 ብር"
+            ),
+            (
+                "ግዕዝ ክሊኒክ - የሕክምና ማኔጅመንት",
+                "የጤና ሲስተም (CustomTkinter)",
+                "የታካሚዎች መዝገብ፣ የመድኃኒት መደብር እና የኢትዮጵያ ዘመን አቆጣጠርን ያካተተ የክሊኒክ ሶፍትዌር።",
+                "Python, CustomTkinter, SQLite",
+                "35,000 ብር"
+            ),
+            (
+                "NetGuard - የኔትወርክ ሴኩሪቲ ቱል",
+                "የደህንነት መሳሪያ (Python CLI/GUI)",
+                "በአካባቢ ኔትወርክ ላይ ያሉ ያልተፈቀዱ መሳሪያዎችን የሚቆጣጠር እና የትራፊክ ደህንነት የሚያረጋግጥ።",
+                "Python, Scapy, Socket Programming",
+                "20,000 ብር"
+            )
+        ]
+        cursor.executemany('''
+            INSERT INTO portfolio (title, category, description, tech_stack, price_estimate)
+            VALUES (?, ?, ?, ?, ?)
+        ''', default_portfolio)
+        
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ==========================================
+# 2. MAIN APPLICATION LOGIC
+# ==========================================
+def main(page: ft.Page):
+    page.title = "Personal LifeOS & Portfolio"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.padding = 10
+    page.scroll = ft.ScrollMode.ADAPTIVE
+
+    # Database Helpers
+    def run_query(query, params=(), fetchall=False, fetchone=False):
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        data = None
+        if fetchall:
+            data = cursor.fetchall()
+        elif fetchone:
+            data = cursor.fetchone()
+        conn.commit()
+        conn.close()
+        return data
+
+    # Notification SnackBar
+    def show_msg(text):
+        page.snack_bar = ft.SnackBar(ft.Text(text, font_family="Ethics"))
+        page.snack_bar.open = True
+        page.update()
 
     # ------------------------------------------
-    # ክፍል 2: የወጪ መቆጣጠሪያ (EXPENSE TRACKER)
+    # TAB 1: 📅 የእለት እንቅስቃሴ (Daily Life OS)
     # ------------------------------------------
-    def build_expenses_view(self):
-        daily_total, monthly_total = self.db.get_expense_stats()
-        expenses = self.db.get_expenses()
+    def build_daily_view():
+        tasks_list = ft.Column(spacing=10)
 
-        expense_items = []
-        for exp in expenses:
-            exp_id, title, amount, cat, date_c = exp
-            expense_items.append(
-                ft.ListTile(
-                    leading=ft.Icon(
-                        ft.Icons.FASTFOOD if cat == "ምግብ" else
-                        ft.Icons.DIRECTIONS_BUS if cat == "ትራንስፖርት" else
-                        ft.Icons.MOVIE if cat == "መዝናኛ" else
-                        ft.Icons.SHOPPING_BAG if cat == "ዕቃ/ቁሳቁስ" else ft.Icons.RECEIPT
-                    ),
-                    title=ft.Text(title, weight=ft.FontWeight.BOLD),
-                    subtitle=ft.Text(f"{cat} • {date_c}"),
-                    trailing=ft.Row([
-                        ft.Text(f"{amount:.2f} ብር", weight=ft.FontWeight.BOLD, size=14, color=ft.Colors.RED_400),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINE,
-                            icon_color=ft.Colors.RED_300,
-                            tooltip="አጥፋ",
-                            on_click=lambda _, e_id=exp_id: self.delete_expense_item(e_id)
+        def load_tasks():
+            tasks_list.controls.clear()
+            rows = run_query("SELECT id, title, steps, priority, is_completed FROM tasks ORDER BY id DESC", fetchall=True)
+            for r in rows:
+                task_id, title, steps, priority, is_completed = r
+                
+                def toggle_complete(e, tid=task_id, val=is_completed):
+                    new_val = 0 if val == 1 else 1
+                    run_query("UPDATE tasks SET is_completed = ? WHERE id = ?", (new_val, tid))
+                    load_tasks()
+
+                p_color = ft.Colors.RED_400 if priority == "ከፍተኛ" else (ft.Colors.ORANGE_400 if priority == "መካከለኛ" else ft.Colors.GREEN_400)
+                
+                tasks_list.controls.append(
+                    ft.Card(
+                        content=ft.Container(
+                            padding=12,
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Checkbox(value=bool(is_completed), on_change=toggle_complete),
+                                    ft.Text(title, size=16, weight=ft.FontWeight.BOLD, 
+                                            style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH if is_completed else None)),
+                                    ft.Container(
+                                        content=ft.Text(priority, size=12, color=ft.Colors.WHITE),
+                                        bgcolor=p_color,
+                                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                                        border_radius=5
+                                    )
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"የአፈጻጸም መመሪያ፡ {steps}", size=13, color=ft.Colors.GREY_400) if steps else ft.Container()
+                            ])
                         )
-                    ], main_axis_alignment=ft.MainAxisAlignment.END, width=130)
-                )
-            )
-
-        return ft.Column([
-            ft.Row([
-                ft.Container(
-                    expand=True,
-                    padding=15,
-                    bgcolor=ft.Colors.SURFACE_CONTAINER,
-                    border_radius=10,
-                    content=ft.Column([
-                        ft.Text("የዛሬ ወጪ", size=12, color=ft.Colors.OUTLINE),
-                        ft.Text(f"{daily_total:.2f} ብር", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
-                    ])
-                ),
-                ft.Container(
-                    expand=True,
-                    padding=15,
-                    bgcolor=ft.Colors.SURFACE_CONTAINER,
-                    border_radius=10,
-                    content=ft.Column([
-                        ft.Text("የዚህ ወር ወጪ", size=12, color=ft.Colors.OUTLINE),
-                        ft.Text(f"{monthly_total:.2f} ብር", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400)
-                    ])
-                )
-            ]),
-            ft.Row([
-                ft.Text("የወጪዎች ዝርዝር", size=16, weight=ft.FontWeight.BOLD, expand=True),
-                ft.FloatingActionButton(
-                    icon=ft.Icons.ADD,
-                    tooltip="አዲስ ወጪ መዝግብ",
-                    mini=True,
-                    on_click=self.open_add_expense_dialog
-                )
-            ]),
-            ft.Container(
-                expand=True,
-                content=ft.ListView(expense_items, spacing=5) if expense_items else ft.Text("ምንም የተመዘገበ ወጪ የለም።")
-            )
-        ], spacing=15)
-
-    def delete_expense_item(self, exp_id):
-        self.db.delete_expense(exp_id)
-        self.render_view()
-
-    def open_add_expense_dialog(self, e):
-        title_tf = ft.TextField(label="የወጪው ርዕስ")
-        amount_tf = ft.TextField(label="የብር መጠን (በብር)", keyboard_type=ft.KeyboardType.NUMBER)
-        category_dd = ft.Dropdown(
-            label="የወጪ ምድብ",
-            options=[
-                ft.dropdown.Option("ምግብ"),
-                ft.dropdown.Option("ትራንስፖርት"),
-                ft.dropdown.Option("መዝናኛ"),
-                ft.dropdown.Option("ዕቃ/ቁሳቁስ"),
-                ft.dropdown.Option("ሌላ")
-            ],
-            value="ምግብ"
-        )
-
-        def save_expense(ev):
-            if title_tf.value and amount_tf.value:
-                try:
-                    amt = float(amount_tf.value)
-                    date_now = datetime.now().strftime("%Y-%m-%d")
-                    self.db.add_expense(title_tf.value, amt, category_dd.value, date_now)
-                    self.page.close(dialog)
-                    self.render_view()
-                except ValueError:
-                    amount_tf.error_text = "እባክዎ ትክክለኛ የቁጥር መጠን ያስገቡ"
-                    amount_tf.update()
-
-        dialog = ft.AlertDialog(
-            title=ft.Text("አዲስ ወጪ መመዝገቢያ"),
-            content=ft.Column([title_tf, amount_tf, category_dd], tight=True, spacing=10),
-            actions=[
-                ft.TextButton("ሰርዝ", on_click=lambda _: self.page.close(dialog)),
-                ft.ElevatedButton("አስቀምጥ", on_click=save_expense)
-            ]
-        )
-        self.page.open(dialog)
-
-    # ------------------------------------------
-    # ክፍል 3: ማስታወሻና ግቦች (NOTES & GOALS)
-    # ------------------------------------------
-    def build_notes_goals_view(self):
-        items = self.db.get_notes_goals()
-        cards = []
-
-        for item in items:
-            i_id, title, content, i_type, progress, status = item
-            if i_type == "ግብ":
-                body = ft.Column([
-                    ft.Text(content, size=13),
-                    ft.Row([
-                        ft.ProgressBar(value=progress, expand=True, color=ft.Colors.GREEN),
-                        ft.Text(f"{int(progress * 100)}%", size=12, weight=ft.FontWeight.BOLD)
-                    ]),
-                    ft.Row([
-                        ft.IconButton(
-                            ft.Icons.REMOVE_CIRCLE_OUTLINE,
-                            tooltip="ቀንስ",
-                            on_click=lambda _, id=i_id, p=progress: self.update_goal_p(id, max(0.0, p - 0.1))
-                        ),
-                        ft.IconButton(
-                            ft.Icons.ADD_CIRCLE_OUTLINE,
-                            tooltip="ጨምር",
-                            on_click=lambda _, id=i_id, p=progress: self.update_goal_p(id, min(1.0, p + 0.1))
-                        ),
-                    ], alignment=ft.MainAxisAlignment.END)
-                ], spacing=8)
-            else:
-                body = ft.Text(content, size=13)
-
-            cards.append(
-                ft.Card(
-                    content=ft.Container(
-                        padding=12,
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Chip(
-                                    label=ft.Text(i_type, size=10),
-                                    bgcolor=ft.Colors.BLUE_CONTAINER if i_type == "ማስታወሻ" else ft.Colors.GREEN_CONTAINER
-                                ),
-                                ft.Text(title, weight=ft.FontWeight.BOLD, size=15, expand=True),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE,
-                                    icon_size=18,
-                                    tooltip="አጥፋ",
-                                    on_click=lambda _, id=i_id: self.delete_note_goal_item(id)
-                                )
-                            ]),
-                            body
-                        ], spacing=8)
                     )
                 )
-            )
+            page.update()
 
-        return ft.Column([
-            ft.Row([
-                ft.Text("ማስታወሻዎች እና ግቦች", size=16, weight=ft.FontWeight.BOLD, expand=True),
-                ft.FloatingActionButton(
-                    icon=ft.Icons.ADD,
-                    tooltip="አዲስ ማስታወሻ/ግብ ጨምር",
-                    mini=True,
-                    on_click=self.open_add_note_goal_dialog
-                )
-            ]),
-            ft.Container(
-                expand=True,
-                content=ft.ListView(cards, spacing=10) if cards else ft.Text("ምንም የተመዘገበ ማስታወሻ ወይም ግብ የለም።")
-            )
-        ], spacing=15)
-
-    def update_goal_p(self, item_id, new_p):
-        self.db.update_goal_progress(item_id, round(new_p, 2))
-        self.render_view()
-
-    def delete_note_goal_item(self, item_id):
-        self.db.delete_note_goal(item_id)
-        self.render_view()
-
-    def open_add_note_goal_dialog(self, e):
-        title_tf = ft.TextField(label="ርዕስ")
-        content_tf = ft.TextField(label="ዝርዝር ሀሳብ / ይዘት", multiline=True, min_lines=2)
-        type_dd = ft.Dropdown(
-            label="ዓይነት",
-            options=[ft.dropdown.Option("ማስታወሻ"), ft.dropdown.Option("ግብ")],
-            value="ማስታወሻ"
-        )
-
-        def save_item(ev):
-            if title_tf.value and content_tf.value:
-                self.db.add_note_goal(title_tf.value, content_tf.value, type_dd.value)
-                self.page.close(dialog)
-                self.render_view()
-
-        dialog = ft.AlertDialog(
-            title=ft.Text("አዲስ ማስታወሻ ወይም ግብ"),
-            content=ft.Column([title_tf, content_tf, type_dd], tight=True, spacing=10),
-            actions=[
-                ft.TextButton("ሰርዝ", on_click=lambda _: self.page.close(dialog)),
-                ft.ElevatedButton("አስቀምጥ", on_click=save_item)
-            ]
-        )
-        self.page.open(dialog)
-
-    # ------------------------------------------
-    # ክፍል 4: አስታዋሾች (REMINDERS)
-    # ------------------------------------------
-    def build_reminders_view(self):
-        reminders = self.db.get_reminders()
-        reminder_widgets = []
-
-        for r in reminders:
-            r_id, task, due_time, priority, is_completed = r
-            
-            p_color = (
-                ft.Colors.RED_400 if priority == "ከፍተኛ"
-                else ft.Colors.ORANGE_400 if priority == "መካከለኛ"
-                else ft.Colors.BLUE_400
-            )
-
-            reminder_widgets.append(
-                ft.Container(
-                    padding=10,
-                    border_radius=8,
-                    bgcolor=ft.Colors.SURFACE_CONTAINER,
-                    content=ft.Row([
-                        ft.Checkbox(
-                            value=bool(is_completed),
-                            on_click=lambda e, id=r_id: self.toggle_reminder_status(id, e.control.value)
-                        ),
-                        ft.Column([
-                            ft.Text(
-                                task,
-                                weight=ft.FontWeight.BOLD,
-                                size=14,
-                                style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH if is_completed else None)
-                            ),
-                            ft.Row([
-                                ft.Icon(ft.Icons.SCHEDULE, size=12, color=ft.Colors.OUTLINE),
-                                ft.Text(due_time, size=11, color=ft.Colors.OUTLINE),
-                                ft.Container(
-                                    content=ft.Text(priority, size=10, color=ft.Colors.WHITE),
-                                    bgcolor=p_color,
-                                    padding=ft.padding.symmetric(horizontal=6, vertical=2),
-                                    border_radius=4
-                                )
-                            ], spacing=5)
-                        ], expand=True, spacing=3),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINE,
-                            icon_size=18,
-                            tooltip="አጥፋ",
-                            on_click=lambda _, id=r_id: self.delete_reminder_item(id)
-                        )
-                    ])
-                )
-            )
-
-        return ft.Column([
-            ft.Row([
-                ft.Text("የታቀዱ አስታዋሾች", size=16, weight=ft.FontWeight.BOLD, expand=True),
-                ft.FloatingActionButton(
-                    icon=ft.Icons.ADD,
-                    tooltip="አዲስ አስታዋሽ መዝግብ",
-                    mini=True,
-                    on_click=self.open_add_reminder_dialog
-                )
-            ]),
-            ft.Container(
-                expand=True,
-                content=ft.ListView(reminder_widgets, spacing=8) if reminder_widgets else ft.Text("ምንም የታቀደ አስታዋሽ የለም።")
-            )
-        ], spacing=15)
-
-    def toggle_reminder_status(self, r_id, status):
-        self.db.toggle_reminder(r_id, 1 if status else 0)
-        self.render_view()
-
-    def delete_reminder_item(self, r_id):
-        self.db.delete_reminder(r_id)
-        self.render_view()
-
-    def open_add_reminder_dialog(self, e):
-        task_tf = ft.TextField(label="የስራው መግለጫ")
-        time_tf = ft.TextField(label="የሚፈጸምበት ሰዓት/ቀን (ምሳሌ፡ 11:30 ከሰዓት)")
-        priority_dd = ft.Dropdown(
-            label="ቅድሚያ ደረጃ",
+        title_input = ft.TextField(label="የተግባሩ ስም", border_radius=8)
+        steps_input = ft.TextField(label="ደረጃ በደረጃ የመፈጸሚያ መመሪያ", multiline=True, border_radius=8)
+        priority_dropdown = ft.Dropdown(
+            label="አስፈላጊነት",
+            value="መካከለኛ",
             options=[
                 ft.dropdown.Option("ከፍተኛ"),
                 ft.dropdown.Option("መካከለኛ"),
                 ft.dropdown.Option("ዝቅተኛ")
             ],
-            value="መካከለኛ"
+            border_radius=8
         )
 
-        def save_reminder(ev):
-            if task_tf.value and time_tf.value:
-                self.db.add_reminder(task_tf.value, time_tf.value, priority_dd.value)
-                self.page.close(dialog)
-                self.render_view()
+        def add_task(e):
+            if not title_input.value:
+                show_msg("እባክዎን የተግባሩን ስም ያስገቡ!")
+                return
+            run_query("INSERT INTO tasks (title, steps, priority, created_at) VALUES (?, ?, ?, ?)",
+                      (title_input.value, steps_input.value, priority_dropdown.value, datetime.now().strftime("%Y-%m-%d")))
+            title_input.value = ""
+            steps_input.value = ""
+            add_dialog.open = False
+            show_msg("ተግባሩ በትክክል ተመዝግቧል!")
+            load_tasks()
 
-        dialog = ft.AlertDialog(
-            title=ft.Text("አዲስ አስታዋሽ መጨመሪያ"),
-            content=ft.Column([task_tf, time_tf, priority_dd], tight=True, spacing=10),
+        add_dialog = ft.AlertDialog(
+            title=ft.Text("አዲስ የእለት ተግባር ጨምር"),
+            content=ft.Column([title_input, steps_input, priority_dropdown], height=240, spacing=10),
             actions=[
-                ft.TextButton("ሰርዝ", on_click=lambda _: self.page.close(dialog)),
-                ft.ElevatedButton("አስቀምጥ", on_click=save_reminder)
+                ft.TextButton("ሰርዝ", on_click=lambda e: setattr(add_dialog, "open", False) or page.update()),
+                ft.ElevatedButton("መዝግብ", on_click=add_task, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
             ]
         )
-        self.page.open(dialog)
 
+        def open_add_dialog(e):
+            page.dialog = add_dialog
+            add_dialog.open = True
+            page.update()
 
-def main(page: ft.Page):
-    AyenewPersonalOS(page)
+        load_tasks()
 
-if __name__ == "__main__":
-    ft.app(target=main)
+        return ft.Container(
+            padding=10,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("📅 የእለት እንቅስቃሴ መሪ", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.BLUE_400, icon_size=32, on_click=open_add_dialog)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Divider(),
+                tasks_list
+            ])
+        )
+
+    # ------------------------------------------
+    # TAB 2: 💰 የገንዘብ እንቅስቃሴ (Expense Tracker)
+    # ------------------------------------------
+    def build_expense_view():
+        trans_list = ft.Column(spacing=8)
+        total_income_text = ft.Text("0.00 ብር", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+        total_expense_text = ft.Text("0.00 ብር", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400)
+        balance_text = ft.Text("0.00 ብር", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_300)
+
+        def load_expenses():
+            trans_list.controls.clear()
+            rows = run_query("SELECT id, title, amount, trans_type, category, trans_date FROM transactions ORDER BY id DESC", fetchall=True)
+            
+            inc = 0.0
+            exp = 0.0
+            for r in rows:
+                tid, title, amount, t_type, cat, t_date = r
+                if t_type == "ገቢ":
+                    inc += amount
+                else:
+                    exp += amount
+                    
+                is_inc = t_type == "ገቢ"
+                trans_list.controls.append(
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.ARROW_DOWNWARD if is_inc else ft.Icons.ARROW_UPWARD, 
+                                        color=ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400),
+                        title=ft.Text(title, weight=ft.FontWeight.BOLD),
+                        subtitle=ft.Text(f"{cat} | {t_date}"),
+                        trailing=ft.Text(f"{'+' if is_inc else '-'}{amount:,.2f} ብር", 
+                                         color=ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400, weight=ft.FontWeight.BOLD)
+                    )
+                )
+            
+            total_income_text.value = f"{inc:,.2f} ብር"
+            total_expense_text.value = f"{exp:,.2f} ብር"
+            balance_text.value = f"{(inc - exp):,.2f} ብር"
+            page.update()
+
+        t_title = ft.TextField(label="የገንዘብ እንቅስቃሴው መግለጫ", border_radius=8)
+        t_amount = ft.TextField(label="የገንዘብ መጠን (በብር)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        t_type = ft.Dropdown(
+            label="አይነት",
+            value="ወጪ",
+            options=[ft.dropdown.Option("ገቢ"), ft.dropdown.Option("ወጪ")],
+            border_radius=8
+        )
+        t_cat = ft.Dropdown(
+            label="መድብ",
+            value="የግል ወጪ",
+            options=[
+                ft.dropdown.Option("የግል ወጪ"),
+                ft.dropdown.Option("የሶፍትዌር መሳሪያዎች"),
+                ft.dropdown.Option("የፕሮጀክት ገቢ"),
+                ft.dropdown.Option("ሌላ")
+            ],
+            border_radius=8
+        )
+
+        def save_transaction(e):
+            if not t_title.value or not t_amount.value:
+                show_msg("እባክዎን ሁሉንም መስኮች በትክክል ይሙሉ!")
+                return
+            try:
+                amt = float(t_amount.value)
+            except ValueError:
+                show_msg("እባክዎን ትክክለኛ የገንዘብ ቁጥር ያስገቡ!")
+                return
+
+            run_query("INSERT INTO transactions (title, amount, trans_type, category, trans_date) VALUES (?, ?, ?, ?, ?)",
+                      (t_title.value, amt, t_type.value, t_cat.value, datetime.now().strftime("%Y-%m-%d")))
+            t_title.value = ""
+            t_amount.value = ""
+            add_trans_dialog.open = False
+            show_msg("የገንዘብ እንቅስቃሴው ተመዝግቧል!")
+            load_expenses()
+
+        add_trans_dialog = ft.AlertDialog(
+            title=ft.Text("አዲስ የገንዘብ መዝገብ"),
+            content=ft.Column([t_title, t_amount, t_type, t_cat], height=260, spacing=10),
+            actions=[
+                ft.TextButton("ሰርዝ", on_click=lambda e: setattr(add_trans_dialog, "open", False) or page.update()),
+                ft.ElevatedButton("መዝግብ", on_click=save_transaction, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE)
+            ]
+        )
+
+        load_expenses()
+
+        return ft.Container(
+            padding=10,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("💰 የገንዘብ እንቅስቃሴ", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(ft.Icons.ADD_CARD, icon_color=ft.Colors.GREEN_400, icon_size=32, 
+                                  on_click=lambda e: setattr(page, "dialog", add_trans_dialog) or setattr(add_trans_dialog, "open", True) or page.update())
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Card(
+                    content=ft.Container(
+                        padding=15,
+                        content=ft.Column([
+                            ft.Row([ft.Text("ጠቅላላ ገቢ፡"), total_income_text], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Row([ft.Text("ጠቅላላ ወጪ፡"), total_expense_text], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Divider(),
+                            ft.Row([ft.Text("ቀሪ ሂሳብ፡", weight=ft.FontWeight.BOLD), balance_text], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                        ])
+                    )
+                ),
+                ft.Text("የቅርብ ጊዜ እንቅስቃሴዎች", size=16, weight=ft.FontWeight.BOLD),
+                trans_list
+            ])
+        )
+
+    # ------------------------------------------
+    # TAB 3: 👥 የግንኙነት መዝገብ (Relationship CRM)
+    # ------------------------------------------
+    def build_contacts_view():
+        contacts_list = ft.Column(spacing=10)
+
+        def load_contacts():
+            contacts_list.controls.clear()
+            rows = run_query("SELECT id, name, role, phone, notes, last_contact FROM contacts ORDER BY id DESC", fetchall=True)
+            for r in rows:
+                cid, name, role, phone, notes, last_contact = r
+                contacts_list.controls.append(
+                    ft.Card(
+                        content=ft.ListTile(
+                            leading=ft.Icon(ft.Icons.PERSON, color=ft.Colors.BLUE_300),
+                            title=ft.Text(name, weight=ft.FontWeight.BOLD),
+                            subtitle=ft.Text(f"ድርሻ፡ {role} | ስልክ፡ {phone}\nማስታወሻ፡ {notes}"),
+                            trailing=ft.Text(last_contact, size=11, color=ft.Colors.GREY_400)
+                        )
+                    )
+                )
+            page.update()
+
+        c_name = ft.TextField(label="ሙሉ ስም", border_radius=8)
+        c_role = ft.Dropdown(
+            label="የግንኙነት አይነት",
+            value="ደንበኛ",
+            options=[
+                ft.dropdown.Option("ደንበኛ"),
+                ft.dropdown.Option("የስራ ባልደረባ"),
+                ft.dropdown.Option("የግል ወዳጅ"),
+                ft.dropdown.Option("አማካሪ")
+            ],
+            border_radius=8
+        )
+        c_phone = ft.TextField(label="ስልክ ቁጥር", keyboard_type=ft.KeyboardType.PHONE, border_radius=8)
+        c_notes = ft.TextField(label="ተጨማሪ ማስታወሻ/ውይይት", multiline=True, border_radius=8)
+
+        def save_contact(e):
+            if not c_name.value:
+                show_msg("እባክዎን ስም ያስገቡ!")
+                return
+            run_query("INSERT INTO contacts (name, role, phone, notes, last_contact) VALUES (?, ?, ?, ?, ?)",
+                      (c_name.value, c_role.value, c_phone.value, c_notes.value, datetime.now().strftime("%Y-%m-%d")))
+            c_name.value = ""
+            c_phone.value = ""
+            c_notes.value = ""
+            add_contact_dialog.open = False
+            show_msg("የግንኙነት መረጃው ተመዝግቧል!")
+            load_contacts()
+
+        add_contact_dialog = ft.AlertDialog(
+            title=ft.Text("አዲስ ሰው መዝግብ"),
+            content=ft.Column([c_name, c_role, c_phone, c_notes], height=270, spacing=10),
+            actions=[
+                ft.TextButton("ሰርዝ", on_click=lambda e: setattr(add_contact_dialog, "open", False) or page.update()),
+                ft.ElevatedButton("መዝግብ", on_click=save_contact, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
+            ]
+        )
+
+        load_contacts()
+
+        return ft.Container(
+            padding=10,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("👥 የግንኙነት መዝገብ", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(ft.Icons.PERSON_ADD, icon_color=ft.Colors.BLUE_400, icon_size=32,
+                                  on_click=lambda e: setattr(page, "dialog", add_contact_dialog) or setattr(add_contact_dialog, "open", True) or page.update())
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Divider(),
+                contacts_list
+            ])
+        )
+
+    # ------------------------------------------
+    # TAB 4: 💻 የፕሮጀክት ማኔጀር (Work & Dev Hub)
+    # ------------------------------------------
+    def build_projects_view():
+        projects_list = ft.Column(spacing=10)
+
+        def load_projects():
+            projects_list.controls.clear()
+            rows = run_query("SELECT id, title, description, status, progress FROM projects ORDER BY id DESC", fetchall=True)
+            for r in rows:
+                pid, title, desc, status, progress = r
+                
+                def update_status(e, project_id=pid):
+                    run_query("UPDATE projects SET status = ? WHERE id = ?", (e.control.value, project_id))
+                    show_msg("የፕሮጀክት ደረጃ ተቀይሯል!")
+
+                projects_list.controls.append(
+                    ft.Card(
+                        content=ft.Container(
+                            padding=12,
+                            content=ft.Column([
+                                ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                                ft.Text(desc, size=13, color=ft.Colors.GREY_300),
+                                ft.Row([
+                                    ft.Text("ደረጃ፡", size=12),
+                                    ft.Dropdown(
+                                        value=status,
+                                        options=[
+                                            ft.dropdown.Option("በእቅድ ላይ"),
+                                            ft.dropdown.Option("በመሰራት ላይ"),
+                                            ft.dropdown.Option("ተጠናቋል")
+                                        ],
+                                        on_change=update_status,
+                                        width=150
+                                    )
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                            ])
+                        )
+                    )
+                )
+            page.update()
+
+        p_title = ft.TextField(label="የፕሮጀክቱ ስም", border_radius=8)
+        p_desc = ft.TextField(label="የስራው ዝርዝር መግለጫ", multiline=True, border_radius=8)
+
+        def save_project(e):
+            if not p_title.value:
+                show_msg("እባክዎን የፕሮጀክት ስም ያስገቡ!")
+                return
+            run_query("INSERT INTO projects (title, description) VALUES (?, ?)", (p_title.value, p_desc.value))
+            p_title.value = ""
+            p_desc.value = ""
+            add_proj_dialog.open = False
+            show_msg("ፕሮጀክቱ ተመዝግቧል!")
+            load_projects()
+
+        add_proj_dialog = ft.AlertDialog(
+            title=ft.Text("አዲስ ፕሮጀክት መዝግብ"),
+            content=ft.Column([p_title, p_desc], height=180, spacing=10),
+            actions=[
+                ft.TextButton("ሰርዝ", on_click=lambda e: setattr(add_proj_dialog, "open", False) or page.update()),
+                ft.ElevatedButton("መዝግብ", on_click=save_project, bgcolor=ft.Colors.PURPLE_600, color=ft.Colors.WHITE)
+            ]
+        )
+
+        load_projects()
+
+        return ft.Container(
+            padding=10,
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("💻 የፕሮጀክት ማኔጀር", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(ft.Icons.ADD_TASK, icon_color=ft.Colors.PURPLE_400, icon_size=32,
+                                  on_click=lambda e: setattr(page, "dialog", add_proj_dialog) or setattr(add_proj_dialog, "open", True) or page.update())
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Divider(),
+                projects_list
+            ])
+        )
+
+    # ------------------------------------------
+    # TAB 5: 🚀 የሶፍትዌር ኤግዚቢሽን (Portfolio Showcase)
+    # ------------------------------------------
+    def build_portfolio_view():
+        portfolio_list = ft.Column(spacing=12)
+
+        def send_inquiry(item_title):
+            inquiry_dialog = ft.AlertDialog(
+                title=ft.Text(f"የግዢ/የስራ ጥያቄ፡ {item_title}"),
+                content=ft.Column([
+                    ft.Text("የእርስዎን ስም እና ስልክ ያስገቡ፤ በቅርቡ እንገናኛለን።"),
+                    ft.TextField(label="ስምዎ", border_radius=8),
+                    ft.TextField(label="ስልክ ቁጥር", keyboard_type=ft.KeyboardType.PHONE, border_radius=8)
+                ], height=180, spacing=10),
+                actions=[
+                    ft.ElevatedButton("ላክ", on_click=lambda e: (setattr(inquiry_dialog, "open", False), show_msg("ጥያቄዎ ተልኳል! እናመሰግናለን።"), page.update()), bgcolor=ft.Colors.ORANGE_600, color=ft.Colors.WHITE)
+                ]
+            )
+            page.dialog = inquiry_dialog
+            inquiry_dialog.open = True
+            page.update()
+
+        def load_portfolio():
+            portfolio_list.controls.clear()
+            rows = run_query("SELECT id, title, category, description, tech_stack, price_estimate FROM portfolio", fetchall=True)
+            for r in rows:
+                pid, title, category, description, tech_stack, price_estimate = r
+                portfolio_list.controls.append(
+                    ft.Card(
+                        content=ft.Container(
+                            padding=15,
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(title, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_300),
+                                    ft.Container(
+                                        content=ft.Text(price_estimate, size=12, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD),
+                                        bgcolor=ft.Colors.AMBER_400,
+                                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                                        border_radius=5
+                                    )
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"ዘርፍ፡ {category}", size=12, color=ft.Colors.GREY_400),
+                                ft.Text(description, size=13),
+                                ft.Text(f"ቴክኖሎጂ፡ {tech_stack}", size=12, color=ft.Colors.BLUE_200, weight=ft.FontWeight.W_500),
+                                ft.ElevatedButton(
+                                    "የሶፍትዌር ግዢ / የስራ ጥያቄ ላክ",
+                                    icon=ft.Icons.SHOPPING_BAG,
+                                    bgcolor=ft.Colors.ORANGE_700,
+                                    color=ft.Colors.WHITE,
+                                    on_click=lambda e, t=title: send_inquiry(t)
+                                )
+                            ], spacing=8)
+                        )
+                    )
+                )
+            page.update()
+
+        load_portfolio()
+
+        return ft.Container(
+            padding=10,
+            content=ft.Column([
+                ft.Text("🚀 የሶፍትዌር ኤግዚቢሽን & ፖርትፎሊዮ", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("የተሰሩ የሶፍትዌር ምርቶች እና አገልግሎቶች ማሳያ", size=13, color=ft.Colors.GREY_400),
+                ft.Divider(),
+                portfolio_list
+            ])
+        )
+
+    # ==========================================
+    # 3. NAVIGATION & VIEW SWITCHER
+    # ==========================================
+    views = [
+        build_daily_view(),
+        build_expense_view(),
+        build_contacts_view(),
+        build_projects_view(),
+        build_portfolio_view()
+    ]
+
+    body_container = ft.Container(content=views[0], expand=True)
+
+    def on_nav_change(e):
+        idx = e.control.selected_index
+        body_container.content = views[idx]
+        page.update()
+
+    page.navigation_bar = ft.NavigationBar(
+        selected_index=0,
+        on_change=on_nav_change,
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.TODAY, label="እንቅስቃሴ"),
+            ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="ገንዘብ"),
+            ft.NavigationBarDestination(icon=ft.Icons.CONTACTS, label="ግንኙነት"),
+            ft.NavigationBarDestination(icon=ft.Icons.WORK, label="ፕሮጀክት"),
+            ft.NavigationBarDestination(icon=ft.Icons.STAR, label="ኤግዚቢሽን"),
+        ]
+    )
+
+    page.add(body_container)
+
+# Run the Application
+ft.app(target=main)
