@@ -13,31 +13,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Linux Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev mesa-utils libglu1-mesa
-
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK & SDK Components
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "cmdline-tools;latest" "build-tools;34.0.0" "platforms;android-34" "ndk;25.2.9519653"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-
-      - name: Configure Flutter & Accept Licenses
-        run: |
-          flutter config --no-analytics
-          flutter config --android-sdk "$ANDROID_HOME"
-          yes | sdkmanager --licenses || true
-          flutter doctor --android-licenses || true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -54,9 +47,10 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
           CI: "true"
         run: |
-          echo "y" | flet build apk --verbose
+          flet build apk --verbose
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
