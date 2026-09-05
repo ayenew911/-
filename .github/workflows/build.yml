@@ -22,14 +22,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android Build Components & Licenses
+      - name: Accept Android Licenses
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "cmdline-tools;latest" "build-tools;34.0.0" "platforms;android-34"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.8'
           channel: 'stable'
 
       - name: Setup Python
@@ -44,8 +44,10 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Build APK with Flet
+        env:
+          CI: "true"
         run: |
-          flet build apk --verbose
+          printf "y\n" | flet build apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
